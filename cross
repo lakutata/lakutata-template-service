@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+
+const {Application} = require('lakutata')
+const {Docker} = require('lakutata/com/docker')
+const {program} = require('commander')
+const {Glob} = require('lakutata/helper')
+const {existsSync} = require('node:fs')
+const path = require('path')
+const appPackageJson = require('./packages/app/package.json')
+require('dotenv').config({path:path.resolve(__dirname,'./.env.docker.info')})
+Application.run(() => ({
+    id: 'cross.builder.tool',
+    name: 'Cross Builder Tool',
+    components: {
+        docker: {
+            class: Docker
+        }
+    },
+    bootstrap: [async (app) => {
+        program
+            .option('-p, --platform <platform>', 'target platform')
+            .option('-repo, --repository <repository>', 'target repository')
+            .option('-ver, --version <version>', 'target version')
+            .action(async (options) => {
+                /**
+                 * @type {Docker}
+                 */
+                const docker = await app.getObject('docker')
+                const files = await Glob('**/*')
+                if (existsSync(path.resolve(__dirname, '.npmrc'))) files.push('.npmrc')
+                try {
+                    const repo = options.repository ? options.repository : appPackageJson.appName.toLowerCase()
+                    const tag = options.version ? options.version : appPackageJson.version
+                    const image = await docker.buildImage({
+                        files: files,
+                        workdir: __dirname,
+                        dockerfile: 'Dockerfile',
+                        platform: options.platform,
+                        outputCallback: output => output.stream && output.stream.trim() ? console.log(output.stream.trim()) : undefined
+                    })
+                    const tags = [tag, 'latest']
+                    await Promise.all(tags.map(tag => image.push({
+                        repo: repo,
+                        tag: tag,
+                        auth: {
+                            username: process.env.DOCKER_USERNAME,
+                            password: process.env.DOCKER_PASSWORD,
+                            serverAddress: repo
+                        }
+                    })))
+                } catch (e) {
+                    await docker.prune({images: true, containers: true})
+                    console.error('error:', e.message)
+                }
+            }).parse()
+    }]
+}))

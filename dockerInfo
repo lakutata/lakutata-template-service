@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+
+const {Application} = require('lakutata')
+const {writeFileSync} = require('node:fs')
+const path = require('path')
+const {DevNull} = require('lakutata/helper')
+const {prompt} = require('inquirer').default
+const envFilePath = path.resolve(__dirname, './.env.docker.info')
+Application.run(() => ({
+    id: 'info.docker.set.tool',
+    name: 'Set Docker Info Tool',
+    bootstrap: [async (app) => {
+        const info = await prompt([
+            {type: 'input', required: true, name: 'username', message: 'Repository username:'},
+            {type: 'password', required: true, name: 'password', message: 'Repository password:'}
+        ])
+        let envContent = ''
+        envContent += `DOCKER_USERNAME="${info.username}"`
+        envContent += '\n'
+        envContent += `DOCKER_PASSWORD="${info.password}"`
+        writeFileSync(envFilePath, envContent, {flag: 'w'})
+    }]
+})).onFatalException(DevNull)
