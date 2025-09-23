@@ -89,7 +89,7 @@ export function SetupHttpEntrypoint(port: number): HTTPEntrypoint {
         })
         expressApp.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
             const errno: string = err['errno'] ? err['errno'] : 'E_UNKNOWN'
-            if (errno === 'E_UNKNOWN') res.statusCode = 500
+            res.statusCode = err['statusCode'] ? err['statusCode'] : 500
             res.send(errorHandler(err.message, errno))
         })
         expressApp.all(/.*/, (req: Request, res: Response): void => {

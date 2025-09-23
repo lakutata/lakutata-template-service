@@ -29,6 +29,6 @@
   "dependencies": {
     "dotenv": "^17.1.0",
     "inquirer": "^12.7.0",
-    "lakutata": "^2.0.33"
+    "lakutata": "^2.0.68"
   }
 }
