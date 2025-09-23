@@ -8,9 +8,9 @@ export class ExampleController extends Controller {
     /**
      * Example test action
      */
-    @HTTPAction('/test', 'get', TestOptions)
-    @GET('/test/test-get',TestOptions)
-    @POST('/test/test-post',TestOptions)
+    @HTTPAction('/test', 'get', TestOptions, {acl: true, name: 'example:test', description: 'Example test'})
+    @GET('/test/test-get', TestOptions, {acl: true, name: 'example:test:get', description: 'Get method test'})
+    @POST('/test/test-post', TestOptions, {acl: true, name: 'example:test:post', description: 'Post method test'})
     public async test(inp: ActionPattern<TestOptions>): Promise<number> {
         return inp.timestamp
     }
