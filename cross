@@ -7,7 +7,7 @@ const {Glob} = require('lakutata/helper')
 const {existsSync} = require('node:fs')
 const path = require('path')
 const appPackageJson = require('./packages/app/package.json')
-require('dotenv').config({path:path.resolve(__dirname,'./.env.docker.info')})
+require('dotenv').config({path: path.resolve(__dirname, './.env.docker.info')})
 Application.run(() => ({
     id: 'cross.builder.tool',
     name: 'Cross Builder Tool',
@@ -39,15 +39,18 @@ Application.run(() => ({
                         outputCallback: output => output.stream && output.stream.trim() ? console.log(output.stream.trim()) : undefined
                     })
                     const tags = [tag, 'latest']
-                    await Promise.all(tags.map(tag => image.push({
-                        repo: repo,
-                        tag: tag,
-                        auth: {
-                            username: process.env.DOCKER_USERNAME,
-                            password: process.env.DOCKER_PASSWORD,
-                            serverAddress: repo
-                        }
-                    })))
+                    for (const tag of tags) {
+                        await image.push({
+                            repo: repo,
+                            tag: tag,
+                            auth: {
+                                username: process.env.DOCKER_USERNAME,
+                                password: process.env.DOCKER_PASSWORD,
+                                serverAddress: repo
+                            }
+                        })
+                    }
+                    await image.remove({force: true})
                 } catch (e) {
                     await docker.prune({images: true, containers: true})
                     console.error('error:', e.message)
