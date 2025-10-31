@@ -27,8 +27,9 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "cross-env": "^10.1.0",
     "dotenv": "^17.1.0",
     "inquirer": "^12.7.0",
-    "lakutata": "^2.0.68"
+    "lakutata": "^2.0.77"
   }
 }

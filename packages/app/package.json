@@ -12,6 +12,7 @@
     "clean": "shx rm -rf ./build",
     "build": "tsc",
     "rebuild": "npm run clean && npm run build",
+    "migration:generate": "cross-env MIGRATION_GENERATE=./src/migrations npm run test",
     "test": "npm run rebuild && node ./build/tests/App.spec.js"
   },
   "devDependencies": {
