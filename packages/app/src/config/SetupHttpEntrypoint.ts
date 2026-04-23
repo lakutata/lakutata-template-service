@@ -64,7 +64,7 @@ export function SetupHttpEntrypoint(port: number): HTTPEntrypoint {
             }
             methods.forEach((method: string): void => {
                 expressApp[method](route, authRequestHandler, (req: Request, res: Response): void => {
-                    const params: Record<string, string> = req.params ? req.params : {}
+                    const params: Record<string, string> = As<Record<string, string>>(req.params ? req.params : {})
                     const query: Record<string, string> = req.query ? As<Record<string, string>>(req.query) : {}
                     const body: Record<string, any> = req.body ? req.body : {}
                     handler(new HTTPContext({
