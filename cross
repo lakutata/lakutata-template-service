@@ -1,60 +1,74 @@
 #!/usr/bin/env node
 
-const {Application} = require('lakutata')
-const {Docker} = require('lakutata/com/docker')
 const {program} = require('commander')
-const {Glob} = require('lakutata/helper')
-const {existsSync} = require('node:fs')
+const {spawnSync} = require('node:child_process')
 const path = require('path')
 const appPackageJson = require('./packages/app/package.json')
 require('dotenv').config({path: path.resolve(__dirname, './.env.docker.info')})
-Application.run(() => ({
-    id: 'cross.builder.tool',
-    name: 'Cross Builder Tool',
-    components: {
-        docker: {
-            class: Docker
+
+// NOTE: This used to build/push via lakutata's dockerode-based Docker component
+// (`docker.buildImage`). dockerode/docker-modem's BuildKit session upload (version:2)
+// corrupts the build context stream on Docker 29+ ("unpigz: invalid deflate data"),
+// and BuildKit is required for cross-platform (arm64 host -> amd64 image) builds.
+// Until the upstream dockerode/docker-modem fix lands, build+push goes straight
+// through the official `docker buildx` CLI. The build context is the repo root and
+// honours .dockerignore (no manual file globbing needed).
+
+/**
+ * Run a command, streaming its output, and abort the process on failure.
+ * @param {string} cmd
+ * @param {string[]} args
+ * @param {object} [opts]
+ */
+function run(cmd, args, opts = {}) {
+    const result = spawnSync(cmd, args, {stdio: 'inherit', cwd: __dirname, ...opts})
+    if (result.error) {
+        console.error(`error: failed to run ${cmd}: ${result.error.message}`)
+        process.exit(1)
+    }
+    if (typeof result.status === 'number' && result.status !== 0) {
+        console.error(`error: ${cmd} exited with code ${result.status}`)
+        process.exit(result.status)
+    }
+    return result
+}
+
+program
+    .option('-p, --platform <platform>', 'target platform', 'linux/amd64')
+    .option('-repo, --repository <repository>', 'target repository')
+    .option('-ver, --version <version>', 'target version')
+    .action((options) => {
+        const repo = options.repository ? options.repository : appPackageJson.appName.toLowerCase()
+        const tag = options.version ? options.version : appPackageJson.version
+        const platform = options.platform
+
+        // Authenticate against the target registry when credentials are provided.
+        const registryHost = repo.includes('/') ? repo.split('/')[0] : repo
+        const username = process.env.DOCKER_USERNAME
+        const password = process.env.DOCKER_PASSWORD
+        if (username && password && /[.:]/.test(registryHost)) {
+            run('docker', ['login', registryHost, '--username', username, '--password-stdin'], {
+                input: password,
+                stdio: ['pipe', 'inherit', 'inherit']
+            })
         }
-    },
-    bootstrap: [async (app) => {
-        program
-            .option('-p, --platform <platform>', 'target platform')
-            .option('-repo, --repository <repository>', 'target repository')
-            .option('-ver, --version <version>', 'target version')
-            .action(async (options) => {
-                /**
-                 * @type {Docker}
-                 */
-                const docker = await app.getObject('docker')
-                const files = await Glob('**/*')
-                if (existsSync(path.resolve(__dirname, '.npmrc'))) files.push('.npmrc')
-                try {
-                    const repo = options.repository ? options.repository : appPackageJson.appName.toLowerCase()
-                    const tag = options.version ? options.version : appPackageJson.version
-                    const image = await docker.buildImage({
-                        files: files,
-                        workdir: __dirname,
-                        dockerfile: 'Dockerfile',
-                        platform: options.platform,
-                        outputCallback: output => output.stream && output.stream.trim() ? console.log(output.stream.trim()) : undefined
-                    })
-                    const tags = [tag, 'latest']
-                    for (const tag of tags) {
-                        await image.push({
-                            repo: repo,
-                            tag: tag,
-                            auth: {
-                                username: process.env.DOCKER_USERNAME,
-                                password: process.env.DOCKER_PASSWORD,
-                                serverAddress: repo
-                            }
-                        })
-                    }
-                    await image.remove({force: true})
-                } catch (e) {
-                    await docker.prune({images: true, containers: true})
-                    console.error('error:', e.message)
-                }
-            }).parse()
-    }]
-}))
+
+        // Build for the target platform and push both the versioned and `latest` tags
+        // in a single buildx invocation. --provenance=false keeps the pushed artifact a
+        // plain single-arch image manifest (matching the previous behaviour). --pull
+        // always refreshes the base image, as the previous implementation did.
+        run('docker', [
+            'buildx', 'build',
+            '--platform', platform,
+            '--file', 'Dockerfile',
+            '--tag', `${repo}:${tag}`,
+            '--tag', `${repo}:latest`,
+            '--provenance=false',
+            '--pull',
+            '--push',
+            '.'
+        ])
+
+        console.log(`pushed ${repo}:${tag} and ${repo}:latest (${platform})`)
+    })
+    .parse()
